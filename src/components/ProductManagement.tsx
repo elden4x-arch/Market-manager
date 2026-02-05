@@ -1,21 +1,25 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Plus, Edit, Trash2, Package, RefreshCw, Search } from "lucide-react";
+import { Plus, Edit, Trash2, Package, RefreshCw, Search, Loader2 } from "lucide-react";
 import { useSupabaseProductStore } from "@/stores/useSupabaseProductStore";
 import { ProductDialog } from "./ProductDialog";
 import { Product } from "@/types/pos";
 import { formatCurrency } from "@/lib/currency";
 
 export function ProductManagement() {
-  const { products, deleteProduct, fetchProducts, loading, error } = useSupabaseProductStore();
+  const { products, deleteProduct, fetchProductsByCategory, loading, error, hasMore } = useSupabaseProductStore();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [page, setPage] = useState(0);
 
-  // Filter products based on search query
+  // Ref for infinite scroll sentinel
+  const loadMoreRef = useRef<HTMLDivElement>(null);
+
+  // Filter products based on search query (client-side for management page)
   const filteredProducts = useMemo(() => {
     if (!searchQuery.trim()) return products;
 
@@ -28,8 +32,35 @@ export function ProductManagement() {
 
   // Load products when component mounts
   useEffect(() => {
-    fetchProducts();
-  }, [fetchProducts]);
+    setPage(0);
+    fetchProductsByCategory(null, 0);
+  }, [fetchProductsByCategory]);
+
+  // Infinite scroll using Intersection Observer
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const first = entries[0];
+        if (first.isIntersecting && hasMore && !loading && !searchQuery.trim()) {
+          const nextPage = page + 1;
+          setPage(nextPage);
+          fetchProductsByCategory(null, nextPage);
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    const currentRef = loadMoreRef.current;
+    if (currentRef) {
+      observer.observe(currentRef);
+    }
+
+    return () => {
+      if (currentRef) {
+        observer.unobserve(currentRef);
+      }
+    };
+  }, [hasMore, loading, page, fetchProductsByCategory, searchQuery]);
 
   const handleEdit = (product: Product) => {
     setEditingProduct(product);
@@ -42,14 +73,16 @@ export function ProductManagement() {
   };
 
   const handleRefresh = () => {
-    fetchProducts();
+    setPage(0);
+    fetchProductsByCategory(null, 0);
   };
 
   const handleDialogClose = (open: boolean) => {
     setDialogOpen(open);
     if (!open) {
       // Refresh products when dialog closes (after add/edit)
-      fetchProducts();
+      setPage(0);
+      fetchProductsByCategory(null, 0);
     }
   };
 
@@ -104,69 +137,72 @@ export function ProductManagement() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {loading ? (
-            <div className="text-center py-8 text-muted-foreground">
-              <Package size={48} className="mx-auto mb-4 opacity-50 animate-pulse" />
-              <p>جاري تحميل المنتجات...</p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {filteredProducts.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  <Package size={48} className="mx-auto mb-4 opacity-50" />
-                  <p>لا توجد منتجات</p>
-                  <p className="text-sm">ابدأ بإضافة منتجات جديدة</p>
-                </div>
-              ) : (
-                filteredProducts.map((product) => (
-                  <div
-                    key={product.id}
-                    className="flex items-center gap-4 p-4 border rounded-lg bg-pos-surface hover:shadow-md transition-shadow"
-                  >
-                    <div className="w-16 h-16 rounded-lg overflow-hidden bg-muted flex-shrink-0">
-                      <img
-                        src={product.image}
-                        alt={product.name}
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
+          <div className="space-y-4">
+            {filteredProducts.length === 0 && !loading ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <Package size={48} className="mx-auto mb-4 opacity-50" />
+                <p>لا توجد منتجات</p>
+                <p className="text-sm">ابدأ بإضافة منتجات جديدة</p>
+              </div>
+            ) : (
+              filteredProducts.map((product) => (
+                <div
+                  key={product.id}
+                  className="flex items-center gap-4 p-4 border rounded-lg bg-pos-surface hover:shadow-md transition-shadow"
+                >
+                  <div className="w-16 h-16 rounded-lg overflow-hidden bg-muted flex-shrink-0">
+                    <img
+                      src={product.image}
+                      alt={product.name}
+                      loading="lazy"
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
 
-                    <div className="flex-1 min-w-0 text-right">
-                      <h3 className="font-semibold text-foreground">{product.name}</h3>
-                      <p className="text-sm text-muted-foreground">{product.category}</p>
-                      <div className="flex items-center gap-2 mt-1">
-                        <Badge variant="outline">{formatCurrency(product.price)}</Badge>
-                        <Badge
-                          variant={product.stock > 10 ? "default" : product.stock > 0 ? "secondary" : "destructive"}
-                        >
-                          المخزون: {product.stock}
-                        </Badge>
-                      </div>
-                    </div>
-
-                    <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleEdit(product)}
-                        className="gap-1"
+                  <div className="flex-1 min-w-0 text-right">
+                    <h3 className="font-semibold text-foreground">{product.name}</h3>
+                    <p className="text-sm text-muted-foreground">{product.category}</p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <Badge variant="outline">{formatCurrency(product.price)}</Badge>
+                      <Badge
+                        variant={product.stock > 10 ? "default" : product.stock > 0 ? "secondary" : "destructive"}
                       >
-                        <Edit size={14} />
-                        تعديل
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleDelete(product.id)}
-                        className="gap-1 text-destructive hover:text-destructive"
-                      >
-                        <Trash2 size={14} />
-                        حذف
-                      </Button>
+                        المخزون: {product.stock}
+                      </Badge>
                     </div>
                   </div>
-                ))
-              )}
+
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleEdit(product)}
+                      className="gap-1"
+                    >
+                      <Edit size={14} />
+                      تعديل
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleDelete(product.id)}
+                      className="gap-1 text-destructive hover:text-destructive"
+                    >
+                      <Trash2 size={14} />
+                      حذف
+                    </Button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Infinite scroll sentinel */}
+          <div ref={loadMoreRef} className="h-4" />
+
+          {loading && (
+            <div className="flex justify-center py-8">
+              <Loader2 className="animate-spin text-primary" size={32} />
             </div>
           )}
         </CardContent>

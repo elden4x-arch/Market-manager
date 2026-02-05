@@ -6,14 +6,14 @@ interface CategoryFilterProps {
   categories: Category[];
   selectedCategory: string | null;
   onCategorySelect: (categoryId: string | null) => void;
-  productCounts: Record<string, number>;
+  productCounts?: Record<string, number>;
 }
 
-export function CategoryFilter({ 
-  categories, 
-  selectedCategory, 
-  onCategorySelect, 
-  productCounts 
+export function CategoryFilter({
+  categories,
+  selectedCategory,
+  onCategorySelect,
+  productCounts
 }: CategoryFilterProps) {
   return (
     <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
@@ -23,11 +23,13 @@ export function CategoryFilter({
         className="flex-shrink-0 gap-2"
       >
         الكل
-        <Badge variant="secondary" className="ml-1">
-          {Object.values(productCounts).reduce((a, b) => a + b, 0)}
-        </Badge>
+        {productCounts && (
+          <Badge variant="secondary" className="ml-1">
+            {Object.values(productCounts).reduce((a, b) => a + b, 0)}
+          </Badge>
+        )}
       </Button>
-      
+
       {categories.map((category) => (
         <Button
           key={category.id}
@@ -37,7 +39,7 @@ export function CategoryFilter({
         >
           <span>{category.icon}</span>
           {category.name}
-          {productCounts[category.name] > 0 && (
+          {productCounts && productCounts[category.name] > 0 && (
             <Badge variant="secondary" className="ml-1">
               {productCounts[category.name]}
             </Badge>

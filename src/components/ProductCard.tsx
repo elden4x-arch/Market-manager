@@ -18,38 +18,40 @@ export function ProductCard({ product }: ProductCardProps) {
   };
 
   return (
-    <Card 
+    <Card
       className={`
         cursor-pointer transition-all duration-200 hover:shadow-lg hover:scale-105
         ${product.stock === 0 ? 'opacity-50 cursor-not-allowed' : ''}
         bg-pos-surface border-border/50 hover:border-primary/30
       `}
       onClick={handleAddToCart}
-      style={{ 
+      style={{
         boxShadow: 'var(--shadow-card)',
         transition: 'var(--transition-smooth)'
       }}
     >
       <CardContent className="p-4">
         <div className="aspect-square mb-3 overflow-hidden rounded-lg bg-muted">
-          <img 
-            src={product.image} 
+          <img
+            src={product.image}
             alt={product.name}
+            loading="lazy"
+            decoding="async"
             className="w-full h-full object-cover"
           />
         </div>
-        
+
         <div className="space-y-2">
           <h3 className="font-semibold text-foreground text-right text-sm leading-tight">
             {product.name}
           </h3>
-          
+
           <div className="flex items-center justify-between">
             <div className="flex flex-col items-start">
               <span className="text-lg font-bold text-primary">
                 {formatCurrency(product.price)}
               </span>
-              <Badge 
+              <Badge
                 variant={product.stock > 10 ? "default" : product.stock > 0 ? "secondary" : "destructive"}
                 className="text-xs"
               >
